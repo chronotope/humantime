@@ -317,6 +317,27 @@ mod test {
     }
 
     #[test]
+    fn test_weeks() {
+        assert_parse_duration_ok!("1weeks", 1 * 604_800, 0);
+        assert_parse_duration_ok!("1 weeks", 1 * 604_800, 0);
+
+        assert_parse_duration_ok!("2week", 2 * 604_800, 0);
+        assert_parse_duration_ok!("2 week", 2 * 604_800, 0);
+
+        assert_parse_duration_ok!("3wks", 3 * 604_800, 0);
+        assert_parse_duration_ok!("3 wks", 3 * 604_800, 0);
+
+        assert_parse_duration_ok!("4wk", 4 * 604_800, 0);
+        assert_parse_duration_ok!("4 wk", 4 * 604_800, 0);
+
+        assert_parse_duration_ok!("5w", 5 * 604_800, 0);
+        assert_parse_duration_ok!("5 w", 5 * 604_800, 0);
+
+        assert_parse_duration_ok!("5W", 5 * 604_800, 0);
+        assert_parse_duration_ok!("5 W", 5 * 604_800, 0);
+    }
+
+    #[test]
     fn test_combo() {
         assert_parse_duration_ok!("20 min 17 nsec", 1200, 17);
         assert_parse_duration_ok!("2h 15m", 8100, 0);
