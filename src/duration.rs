@@ -314,6 +314,9 @@ impl fmt::Display for FormattedDuration {
         item(f, started, "m", minutes as u32)?;
         item(f, started, "s", seconds as u32)?;
         item(f, started, "ms", millis)?;
+        #[cfg(feature = "mu")]
+        item(f, started, "µs", micros)?;
+        #[cfg(not(feature = "mu"))]
         item(f, started, "us", micros)?;
         item(f, started, "ns", nanosec)?;
         Ok(())
@@ -486,6 +489,18 @@ mod test {
             ns, us/µs, ms, sec, min, hours, days, weeks, months, \
             years (and few variations)"
         );
+    }
+
+    #[cfg(feature = "mu")]
+    #[test]
+    fn test_format_micros() {
+        assert_eq!(format_duration(Duration::from_micros(123)).to_string(), "123µs");
+    }
+
+    #[cfg(not(feature = "mu"))]
+    #[test]
+    fn test_format_micros() {
+        assert_eq!(format_duration(Duration::from_micros(123)).to_string(), "123us");
     }
 
     #[test]

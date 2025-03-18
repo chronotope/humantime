@@ -11,6 +11,9 @@ version = "2.2.0"
 edition = "2021"
 categories = ["date-and-time"]
 
+[features]
+mu = []
+
 [dev-dependencies]
 bencher = "0.1.5"
 time = { version = "0.3", features = ["formatting"] }
