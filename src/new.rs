@@ -186,6 +186,84 @@ mod test {
     }
 
     #[test]
+    fn test_microsecond() {
+        assert_parse_duration_ok!("1micros", 0, 1000);
+        assert_parse_duration_ok!("1 micros", 0, 1000);
+
+        assert_parse_duration_ok!("2usec", 0, 2000);
+        assert_parse_duration_ok!("2 usec", 0, 2000);
+
+        assert_parse_duration_ok!("3us", 0, 3000);
+        assert_parse_duration_ok!("3 us", 0, 3000);
+    }
+
+    #[test]
+    fn test_millisecond() {
+        assert_parse_duration_ok!("1millis", 0, 1_000_000);
+        assert_parse_duration_ok!("1 millis", 0, 1_000_000);
+
+        assert_parse_duration_ok!("2msec", 0, 2_000_000);
+        assert_parse_duration_ok!("2 msec", 0, 2_000_000);
+
+        assert_parse_duration_ok!("3ms", 0, 3_000_000);
+        assert_parse_duration_ok!("3 ms", 0, 3_000_000);
+    }
+
+    #[test]
+    fn test_seconds() {
+        assert_parse_duration_ok!("1seconds", 1, 0);
+        assert_parse_duration_ok!("1 seconds", 1, 0);
+
+        assert_parse_duration_ok!("2second", 2, 0);
+        assert_parse_duration_ok!("2 second", 2, 0);
+
+        assert_parse_duration_ok!("3secs", 3, 0);
+        assert_parse_duration_ok!("3 secs", 3, 0);
+
+        assert_parse_duration_ok!("4sec", 4, 0);
+        assert_parse_duration_ok!("4 sec", 4, 0);
+
+        assert_parse_duration_ok!("5s", 5, 0);
+        assert_parse_duration_ok!("5 s", 5, 0);
+    }
+
+    #[test]
+    fn test_minutes() {
+        assert_parse_duration_ok!("1minutes", 1 * 60, 0);
+        assert_parse_duration_ok!("1 minutes", 1 * 60, 0);
+
+        assert_parse_duration_ok!("2minute", 2 * 60, 0);
+        assert_parse_duration_ok!("2 minute", 2 * 60, 0);
+
+        assert_parse_duration_ok!("3mins", 3 * 60, 0);
+        assert_parse_duration_ok!("3 mins", 3 * 60, 0);
+
+        assert_parse_duration_ok!("4min", 4 * 60, 0);
+        assert_parse_duration_ok!("4 min", 4 * 60, 0);
+
+        assert_parse_duration_ok!("5m", 5 * 60, 0);
+        assert_parse_duration_ok!("5 m", 5 * 60, 0);
+    }
+
+    #[test]
+    fn test_hours() {
+        assert_parse_duration_ok!("1hours", 1 * 3600, 0);
+        assert_parse_duration_ok!("1 hours", 1 * 3600, 0);
+
+        assert_parse_duration_ok!("2hour", 2 * 3600, 0);
+        assert_parse_duration_ok!("2 hour", 2 * 3600, 0);
+
+        assert_parse_duration_ok!("3hrs", 3 * 3600, 0);
+        assert_parse_duration_ok!("3 hrs", 3 * 3600, 0);
+
+        assert_parse_duration_ok!("4hr", 4 * 3600, 0);
+        assert_parse_duration_ok!("4 hr", 4 * 3600, 0);
+
+        assert_parse_duration_ok!("5h", 5 * 3600, 0);
+        assert_parse_duration_ok!("5 h", 5 * 3600, 0);
+    }
+
+    #[test]
     fn test_combo() {
         assert_eq!(
             parse_duration_new("20 min 17 nsec "),
