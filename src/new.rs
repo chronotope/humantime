@@ -265,21 +265,21 @@ mod test {
 
     #[test]
     fn test_combo() {
-        assert_eq!(
-            parse_duration_new("20 min 17 nsec "),
-            Ok(Duration::new(1200, 17))
-        );
-        assert_eq!(parse_duration_new("2h 15m"), Ok(Duration::new(8100, 0)));
+        assert_parse_duration_ok!("20 min 17 nsec", 1200, 17);
+        assert_parse_duration_ok!("2h 15m", 8100, 0);
     }
 
     #[test]
     fn test_overlow() {
         assert_parse_duration_err!("100000000000000000000ns");
+        assert_parse_duration_err!("100000000000000000000us");
+        assert_parse_duration_err!("100000000000000000000ms");
         assert_parse_duration_err!("100000000000000000000s");
+        assert_parse_duration_err!("100000000000000000000m");
         assert_parse_duration_err!("100000000000000000000h");
         assert_parse_duration_err!("100000000000000000000d");
         assert_parse_duration_err!("100000000000000000000w");
         assert_parse_duration_err!("100000000000000000000M");
-        assert_parse_duration_err!("100000000000000000000y");
+        assert_parse_duration_err!("100000000000000000000Y");
     }
 }
