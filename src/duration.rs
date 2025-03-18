@@ -368,7 +368,10 @@ mod test {
         assert_eq!(parse_duration("365d"), Ok(Duration::new(31_536_000, 0)));
         assert_eq!(parse_duration("1week"), Ok(Duration::new(604_800, 0)));
         assert_eq!(parse_duration("7weeks"), Ok(Duration::new(4_233_600, 0)));
-        assert_eq!(parse_duration("104wks"), Ok(Duration::new(2*31_449_600, 0)));
+        assert_eq!(
+            parse_duration("104wks"),
+            Ok(Duration::new(2 * 31_449_600, 0))
+        );
         assert_eq!(parse_duration("100wk"), Ok(Duration::new(60_480_000, 0)));
         assert_eq!(parse_duration("52w"), Ok(Duration::new(31_449_600, 0)));
         assert_eq!(parse_duration("1month"), Ok(Duration::new(2_630_016, 0)));
@@ -384,11 +387,11 @@ mod test {
         );
         assert_eq!(
             parse_duration("15yrs"),
-            Ok(Duration::new(15*31_557_600, 0))
+            Ok(Duration::new(15 * 31_557_600, 0))
         );
         assert_eq!(
             parse_duration("10yr"),
-            Ok(Duration::new(10*31_557_600, 0))
+            Ok(Duration::new(10 * 31_557_600, 0))
         );
         assert_eq!(parse_duration("17y"), Ok(Duration::new(536_479_200, 0)));
     }

@@ -16,10 +16,11 @@
 //! [humantime-serde]: https://docs.rs/humantime-serde
 
 #![forbid(unsafe_code)]
-#![warn(missing_debug_implementations, missing_docs, unreachable_pub)]
+#![warn(missing_debug_implementations, unreachable_pub)]
 
 mod date;
 mod duration;
+pub mod new;
 mod wrapper;
 
 pub use self::date::Rfc3339Timestamp;
