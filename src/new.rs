@@ -75,12 +75,41 @@ fn unit(input: &str) -> IResult<&str, Unit> {
         tag("m"),
     ))
     .map(|_| Unit::Minutes);
-    let hours =
-        alt((tag("hours"), tag("hour"), tag("hrs"), tag("hr"), tag("h"))).map(|_| Unit::Hours);
-    let days = alt((tag("days"), tag("day"), tag("d"))).map(|_| Unit::Days);
-    let weeks =
-        alt((tag("weeks"), tag("week"), tag("wks"), tag("wk"), tag("w"))).map(|_| Unit::Weeks);
-    let months = alt((tag("months"), tag("month"), tag("M"))).map(|_| Unit::Months);
+    let hours = alt((
+        tag("hours"),
+        tag("hour"),
+        tag("hrs"),
+        tag("hr"),
+        tag("h"),
+        tag("H"),
+    ))
+    .map(|_| Unit::Hours);
+    let days = alt((
+        tag("days"),
+        tag("day"),
+        tag("dys"),
+        tag("dy"),
+        tag("d"),
+        tag("D"),
+    ))
+    .map(|_| Unit::Days);
+    let weeks = alt((
+        tag("weeks"),
+        tag("week"),
+        tag("wks"),
+        tag("wk"),
+        tag("w"),
+        tag("W"),
+    ))
+    .map(|_| Unit::Weeks);
+    let months = alt((
+        tag("months"),
+        tag("month"),
+        tag("mths"),
+        tag("mth"),
+        tag("M"),
+    ))
+    .map(|_| Unit::Months);
     let years = alt((
         tag("years"),
         tag("year"),
