@@ -290,6 +290,30 @@ mod test {
 
         assert_parse_duration_ok!("5h", 5 * 3600, 0);
         assert_parse_duration_ok!("5 h", 5 * 3600, 0);
+
+        assert_parse_duration_ok!("5H", 5 * 3600, 0);
+        assert_parse_duration_ok!("5 H", 5 * 3600, 0);
+    }
+
+    #[test]
+    fn test_days() {
+        assert_parse_duration_ok!("1days", 1 * 86400, 0);
+        assert_parse_duration_ok!("1 days", 1 * 86400, 0);
+
+        assert_parse_duration_ok!("2day", 2 * 86400, 0);
+        assert_parse_duration_ok!("2 day", 2 * 86400, 0);
+
+        assert_parse_duration_ok!("3dys", 3 * 86400, 0);
+        assert_parse_duration_ok!("3 dys", 3 * 86400, 0);
+
+        assert_parse_duration_ok!("4dy", 4 * 86400, 0);
+        assert_parse_duration_ok!("4 dy", 4 * 86400, 0);
+
+        assert_parse_duration_ok!("5d", 5 * 86400, 0);
+        assert_parse_duration_ok!("5 d", 5 * 86400, 0);
+
+        assert_parse_duration_ok!("5D", 5 * 86400, 0);
+        assert_parse_duration_ok!("5 D", 5 * 86400, 0);
     }
 
     #[test]
