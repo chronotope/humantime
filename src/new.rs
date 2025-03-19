@@ -338,6 +338,24 @@ mod test {
     }
 
     #[test]
+    fn test_months() {
+        assert_parse_duration_ok!("1months", 1 * 2_630_016, 0);
+        assert_parse_duration_ok!("1 months", 1 * 2_630_016, 0);
+
+        assert_parse_duration_ok!("2month", 2 * 2_630_016, 0);
+        assert_parse_duration_ok!("2 month", 2 * 2_630_016, 0);
+
+        assert_parse_duration_ok!("3mths", 3 * 2_630_016, 1);
+        assert_parse_duration_ok!("3 mths", 3 * 2_630_016, 1);
+
+        assert_parse_duration_ok!("4mth", 4 * 2_630_016, 0);
+        assert_parse_duration_ok!("4 mth", 4 * 2_630_016, 0);
+
+        assert_parse_duration_ok!("5M", 5 * 2_630_016, 2);
+        assert_parse_duration_ok!("5 M", 5 * 2_630_016, 2);
+    }
+
+    #[test]
     fn test_combo() {
         assert_parse_duration_ok!("20 min 17 nsec", 1200, 17);
         assert_parse_duration_ok!("2h 15m", 8100, 0);
