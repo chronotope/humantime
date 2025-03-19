@@ -2,7 +2,7 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{space0, space1},
-    combinator::opt,
+    combinator::{opt, recognize},
     multi::many1,
     number::complete::double,
     sequence::{separated_pair, terminated},
@@ -142,7 +142,10 @@ fn number(input: &str) -> IResult<&str, f64> {
 // Parse a float followed by a unit
 fn time_span(input: &str) -> IResult<&str, Duration> {
     let number_input = separated_pair(number, opt(space0), unit);
-    let (input, (value, unit)) = terminated(number_input, opt(space1)).parse(input)?;
+    let and_with_spaces = recognize((opt(space1), tag("and"), opt(space1)));
+    let duration_sep = alt((and_with_spaces, space1));
+
+    let (input, (value, unit)) = terminated(number_input, opt(duration_sep)).parse(input)?;
     Ok((input, convert_to_duration(value, unit)))
 }
 
@@ -169,6 +172,7 @@ pub fn parse_duration_new(input: &str) -> Result<Duration, ParseError> {
         .finish()?;
 
     if !input.trim().is_empty() {
+        dbg!(input);
         return Err(ParseError::InputLeftOver);
     }
 
@@ -389,7 +393,12 @@ mod test {
     #[test]
     fn test_combo() {
         assert_parse_duration_ok!("20 min 17 nsec", 1200, 17);
+        assert_parse_duration_ok!("20min17nsec", 1200, 17);
         assert_parse_duration_ok!("2h 15m", 8100, 0);
+        assert_parse_duration_ok!("2hand15m", 8100, 0);
+        assert_parse_duration_ok!("2h and 15m", 8100, 0);
+        assert_parse_duration_ok!("2hand 15m", 8100, 0);
+        assert_parse_duration_ok!("2hand15m", 8100, 0);
     }
 
     #[test]
