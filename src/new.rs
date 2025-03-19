@@ -356,6 +356,27 @@ mod test {
     }
 
     #[test]
+    fn test_years() {
+        assert_parse_duration_ok!("1years", 1 * 31_557_600, 0);
+        assert_parse_duration_ok!("1 years", 1 * 31_557_600, 0);
+
+        assert_parse_duration_ok!("2year", 2 * 31_557_600, 0);
+        assert_parse_duration_ok!("2 year", 2 * 31_557_600, 0);
+
+        assert_parse_duration_ok!("3yrs", 3 * 31_557_600, 0);
+        assert_parse_duration_ok!("3 yrs", 3 * 31_557_600, 0);
+
+        assert_parse_duration_ok!("4yr", 4 * 31_557_600, 0);
+        assert_parse_duration_ok!("4 yr", 4 * 31_557_600, 0);
+
+        assert_parse_duration_ok!("5y", 5 * 31_557_600, 0);
+        assert_parse_duration_ok!("5 y", 5 * 31_557_600, 0);
+
+        assert_parse_duration_ok!("5Y", 5 * 31_557_600, 0);
+        assert_parse_duration_ok!("5 Y", 5 * 31_557_600, 0);
+    }
+
+    #[test]
     fn test_combo() {
         assert_parse_duration_ok!("20 min 17 nsec", 1200, 17);
         assert_parse_duration_ok!("2h 15m", 8100, 0);
