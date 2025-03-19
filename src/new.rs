@@ -398,7 +398,6 @@ mod test {
         assert_parse_duration_ok!("2hand15m", 8100, 0);
         assert_parse_duration_ok!("2h and 15m", 8100, 0);
         assert_parse_duration_ok!("2hand 15m", 8100, 0);
-        assert_parse_duration_ok!("2hand15m", 8100, 0);
     }
 
     #[test]
