@@ -45,8 +45,8 @@ fn convert_to_duration(value: f64, unit: Unit) -> Duration {
         Unit::Hours => value * 3600.,
         Unit::Days => value * 86400.,
         Unit::Weeks => value * 604800.,
-        Unit::Months => value * 30.44 * 86400.,
-        Unit::Years => value * 365.25 * 86400.,
+        Unit::Months => value * 30.44 * 86400., // Average month length in days
+        Unit::Years => value * 365.25 * 86400., // Average year length in days
     };
 
     let seconds = total_seconds.floor() as u64;
@@ -188,6 +188,14 @@ pub enum Error {
 ///
 /// assert_eq!(parse_duration("2h 37min"), Ok(Duration::new(9420, 0)));
 /// assert_eq!(parse_duration("32ms"), Ok(Duration::new(0, 32_000_000)));
+/// assert_eq!(parse_duration("2 minutes"), Ok(Duration::new(120, 0)));
+/// assert_eq!(parse_duration("2 minutes and 30 seconds"), Ok(Duration::new(150, 0)));
+/// assert_eq!(parse_duration("2hrs2mins"), Ok(Duration::new(7320, 0)));
+/// assert_eq!(parse_duration("2days and 2mins"), Ok(Duration::new(172_920, 0)));
+/// assert_eq!(parse_duration(".5mins"), Ok(Duration::new(30, 0)));
+/// assert_eq!(parse_duration("1.5 mins"), Ok(Duration::new(90, 0)));
+/// assert_eq!(parse_duration("0.1 days"), Ok(Duration::new(8640, 0)));
+/// assert_eq!(parse_duration("11e-1 days"), Ok(Duration::new(95_040, 0)));
 /// ```
 pub fn parse_duration(input: &str) -> Result<Duration, Error> {
     let input = input.trim();
