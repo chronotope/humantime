@@ -141,8 +141,8 @@ fn number(input: &str) -> IResult<&str, f64> {
 
 // Parse a float followed by a unit
 fn time_span(input: &str) -> IResult<&str, Duration> {
-    let (input, (value, unit)) =
-        terminated(separated_pair(number, opt(space0), unit), opt(space1)).parse(input)?;
+    let number_input = separated_pair(number, opt(space0), unit);
+    let (input, (value, unit)) = terminated(number_input, opt(space1)).parse(input)?;
     Ok((input, convert_to_duration(value, unit)))
 }
 
@@ -374,6 +374,16 @@ mod test {
 
         assert_parse_duration_ok!("5Y", 5 * 31_557_600, 0);
         assert_parse_duration_ok!("5 Y", 5 * 31_557_600, 0);
+    }
+
+    #[test]
+    fn test_fractions() {
+        assert_parse_duration_ok!(".5m", 30, 0);
+        assert_parse_duration_ok!("1.5m", 90, 0);
+        assert_parse_duration_ok!("3.44d", 297_216, 0);
+        assert_parse_duration_ok!("0.0001 days", 8, 640_000_000);
+        assert_parse_duration_ok!("11e-1 days", 95_040, 0);
+        assert_parse_duration_ok!("11.2e-1 days", 96_768, 0);
     }
 
     #[test]
