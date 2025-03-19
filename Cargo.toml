@@ -27,3 +27,7 @@ harness = false
 [[bench]]
 name = "datetime_parse"
 harness = false
+
+[dependencies]
+nom = "8.0.0"
+thiserror = "2.0.12"

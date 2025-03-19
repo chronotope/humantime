@@ -20,8 +20,7 @@
 
 mod date;
 mod duration;
-pub mod format;
-pub mod new;
+mod format;
 mod wrapper;
 
 pub use self::date::Rfc3339Timestamp;
