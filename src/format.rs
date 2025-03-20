@@ -1,5 +1,7 @@
 use std::{fmt, time::Duration};
 
+use crate::units::Unit;
+
 /// A wrapper type that allows you to Display a Duration
 #[derive(Debug, Clone)]
 pub struct FormattedDuration(Duration);
@@ -39,7 +41,7 @@ fn item_plural(f: &mut fmt::Formatter, started: &mut bool, name: &str, value: u6
     Ok(())
 }
 
-fn item(f: &mut fmt::Formatter, started: &mut bool, name: &str, value: u32) -> fmt::Result {
+fn item(f: &mut fmt::Formatter, started: &mut bool, name: &str, value: u64) -> fmt::Result {
     if value > 0 {
         if *started {
             f.write_str(" ")?;
@@ -59,38 +61,33 @@ impl FormattedDuration {
 
 impl fmt::Display for FormattedDuration {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let secs = self.0.as_secs();
-        let nanos = self.0.subsec_nanos();
+        let secs = self.0.as_secs_f64();
 
-        if secs == 0 && nanos == 0 {
+        if secs == 0.0 {
             f.write_str("0s")?;
             return Ok(());
         }
 
-        let years = secs / 31_557_600; // 365.25d
-        let ydays = secs % 31_557_600;
-        let months = ydays / 2_630_016; // 30.44d
-        let mdays = ydays % 2_630_016;
-        let days = mdays / 86400;
-        let day_secs = mdays % 86400;
-        let hours = day_secs / 3600;
-        let minutes = day_secs % 3600 / 60;
-        let seconds = day_secs % 60;
-
-        let millis = nanos / 1_000_000;
-        let micros = nanos / 1000 % 1000;
-        let nanosec = nanos % 1000;
+        let (years, secs) = Unit::Years.from_second(secs);
+        let (months, secs) = Unit::Months.from_second(secs);
+        let (days, secs) = Unit::Days.from_second(secs);
+        let (hours, secs) = Unit::Hours.from_second(secs);
+        let (minutes, secs) = Unit::Minutes.from_second(secs);
+        let (seconds, secs) = Unit::Seconds.from_second(secs);
+        let (millis, secs) = Unit::Millis.from_second(secs);
+        let (micros, secs) = Unit::Micros.from_second(secs);
+        let (nanos, _) = Unit::Micros.from_second(secs);
 
         let started = &mut false;
         item_plural(f, started, "year", years)?;
         item_plural(f, started, "month", months)?;
         item_plural(f, started, "day", days)?;
-        item(f, started, "h", hours as u32)?;
-        item(f, started, "m", minutes as u32)?;
-        item(f, started, "s", seconds as u32)?;
+        item(f, started, "h", hours)?;
+        item(f, started, "m", minutes)?;
+        item(f, started, "s", seconds)?;
         item(f, started, "ms", millis)?;
         item(f, started, "us", micros)?;
-        item(f, started, "ns", nanosec)?;
+        item(f, started, "ns", nanos)?;
         Ok(())
     }
 }

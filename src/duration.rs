@@ -11,19 +11,7 @@ use nom::{
 use std::time::Duration;
 use thiserror::Error;
 
-#[derive(Debug)]
-enum Unit {
-    Nanos,
-    Micros,
-    Millis,
-    Seconds,
-    Minutes,
-    Hours,
-    Days,
-    Weeks,
-    Months,
-    Years,
-}
+use crate::units::Unit;
 
 // Check if a given f64 numbers fits in u64
 fn parse_decimal(value: f64) -> Option<f64> {
@@ -36,19 +24,7 @@ fn parse_decimal(value: f64) -> Option<f64> {
 
 // Convert parsed units to seconds and nanoseconds
 fn convert_to_duration(value: f64, unit: Unit) -> Duration {
-    let total_seconds = match unit {
-        Unit::Nanos => value * 1e-9,
-        Unit::Micros => value * 1e-6,
-        Unit::Millis => value * 1e-3,
-        Unit::Seconds => value,
-        Unit::Minutes => value * 60.,
-        Unit::Hours => value * 3600.,
-        Unit::Days => value * 86400.,
-        Unit::Weeks => value * 604800.,
-        Unit::Months => value * 30.44 * 86400., // Average month length in days
-        Unit::Years => value * 365.25 * 86400., // Average year length in days
-    };
-
+    let total_seconds = unit.to_second(value);
     let seconds = total_seconds.floor() as u64;
     let nanos = ((total_seconds - total_seconds.floor()) * 1e9).round() as u32;
 
@@ -387,14 +363,14 @@ mod test {
         assert_parse_duration_ok!("2month", 2 * 2_630_016, 0);
         assert_parse_duration_ok!("2 month", 2 * 2_630_016, 0);
 
-        assert_parse_duration_ok!("3mths", 3 * 2_630_016, 1);
-        assert_parse_duration_ok!("3 mths", 3 * 2_630_016, 1);
+        assert_parse_duration_ok!("3mths", 3 * 2_630_016, 0);
+        assert_parse_duration_ok!("3 mths", 3 * 2_630_016, 0);
 
         assert_parse_duration_ok!("4mth", 4 * 2_630_016, 0);
         assert_parse_duration_ok!("4 mth", 4 * 2_630_016, 0);
 
-        assert_parse_duration_ok!("5M", 5 * 2_630_016, 2);
-        assert_parse_duration_ok!("5 M", 5 * 2_630_016, 2);
+        assert_parse_duration_ok!("5M", 5 * 2_630_016, 0);
+        assert_parse_duration_ok!("5 M", 5 * 2_630_016, 0);
     }
 
     #[test]

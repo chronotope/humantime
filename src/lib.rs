@@ -18,9 +18,11 @@
 #![forbid(unsafe_code)]
 #![warn(missing_debug_implementations, unreachable_pub)]
 
+mod constants;
 mod date;
 mod duration;
 mod format;
+mod units;
 mod wrapper;
 
 pub use self::date::Rfc3339Timestamp;
