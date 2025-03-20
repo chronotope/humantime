@@ -179,6 +179,10 @@ pub fn parse_duration(input: &str) -> Result<Duration, Error> {
         return Err(Error::EmptyInput);
     }
 
+    if input == "0" {
+        return Ok(Duration::new(0, 0));
+    }
+
     let (input, durations) = many1(time_span)
         .parse(input)
         .map_err(|e| e.to_owned())
@@ -406,7 +410,7 @@ mod test {
 
     #[test]
     fn allow_0_with_no_unit() {
-        assert_eq!(parse_duration("0"), Ok(Duration::new(0, 0)));
+        assert_parse_duration_ok!("0", 0, 0);
     }
 
     #[test]
