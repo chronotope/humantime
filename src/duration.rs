@@ -9,7 +9,6 @@ use nom::{
     Finish, IResult, Parser,
 };
 use std::time::Duration;
-use thiserror::Error;
 
 use crate::units::Unit;
 
@@ -127,17 +126,30 @@ fn time_span(input: &str) -> IResult<&str, Duration> {
 }
 
 /// Error parsing human-friendly duration
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Error {
-    #[error("input is empty")]
     /// Input is empty.
     EmptyInput,
-    #[error("parsing duration failed at: {0}")]
     /// Failed to fully parse given input.
     ParseFailed(String),
     /// Error parsing input with nom.
-    #[error("parse duration error: {0}")]
-    Nom(#[from] nom::error::Error<String>),
+    Nom(nom::error::Error<String>),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::EmptyInput => write!(f, "input is empty"),
+            Error::ParseFailed(left_over) => write!(f, "parsing duration failed at: {left_over}"),
+            Error::Nom(error) => write!(f, "parse duration error: {error}"),
+        }
+    }
+}
+
+impl From<nom::error::Error<String>> for Error {
+    fn from(value: nom::error::Error<String>) -> Self {
+        Self::Nom(value)
+    }
 }
 
 /// Parse duration object `1hour 12min 5s`
