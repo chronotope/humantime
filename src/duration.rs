@@ -441,18 +441,19 @@ mod test {
         }
     }
 
-    // #[test]
-    // fn random_second() {
-    //     use rand::Rng;
-    //     for _ in 0..10000 {
-    //         let sec = rand::rng().random_range(0..253_370_764_800);
-    //         let d = Duration::new(sec, 0);
-    //         assert_eq!(d, parse_duration(&format_duration(d).to_string()).unwrap());
-    //     }
-    // }
+    #[test]
+    fn random_second() {
+        use rand::Rng;
+        for _ in 0..10000 {
+            let sec = rand::rng().random_range(0..253_370_764_800);
+            let d = Duration::new(sec, 0);
+            assert_eq!(d, parse_duration(&format_duration(d).to_string()).unwrap());
+        }
+    }
 
     // #[test]
     // fn random_any() {
+    //     use rand::Rng;
     //     for _ in 0..10000 {
     //         let sec = rand::rng().random_range(0..253_370_764_800);
     //         let nanos = rand::rng().random_range(0..1_000_000_000);
