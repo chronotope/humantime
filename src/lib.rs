@@ -16,10 +16,13 @@
 //! [humantime-serde]: https://docs.rs/humantime-serde
 
 #![forbid(unsafe_code)]
-#![warn(missing_debug_implementations, missing_docs, unreachable_pub)]
+#![warn(missing_debug_implementations, unreachable_pub)]
 
+mod constants;
 mod date;
 mod duration;
+mod format;
+mod units;
 mod wrapper;
 
 pub use self::date::Rfc3339Timestamp;
@@ -28,6 +31,6 @@ pub use self::date::{
     format_rfc3339_seconds,
 };
 pub use self::date::{parse_rfc3339, parse_rfc3339_weak, Error as TimestampError};
-pub use self::duration::{format_duration, FormattedDuration};
 pub use self::duration::{parse_duration, Error as DurationError};
+pub use self::format::{format_duration, FormattedDuration};
 pub use self::wrapper::{Duration, Timestamp};

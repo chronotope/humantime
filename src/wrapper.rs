@@ -4,7 +4,8 @@ use std::str::FromStr;
 use std::time::{Duration as StdDuration, SystemTime};
 
 use crate::date::{self, format_rfc3339, parse_rfc3339_weak};
-use crate::duration::{self, format_duration, parse_duration};
+use crate::duration::{self, parse_duration};
+use crate::format_duration;
 
 /// A wrapper for duration that has `FromStr` implementation
 ///
