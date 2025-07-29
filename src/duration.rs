@@ -226,6 +226,9 @@ impl Parser<'_> {
 /// assert_eq!(parse_duration("32ms"), Ok(Duration::new(0, 32_000_000)));
 /// ```
 pub fn parse_duration(s: &str) -> Result<Duration, Error> {
+    if s == "0" {
+        return Ok(Duration::ZERO);
+    }
     Parser {
         iter: s.chars(),
         src: s,
