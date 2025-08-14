@@ -53,16 +53,15 @@ jobs:
 #        components: clippy
 #    - run: cargo clippy --all-features
 
-# TODO: rustfmt
-#  rustfmt:
-#    name: Check formatting
-#    runs-on: ubuntu-latest
-#    steps:
-#    - uses: actions/checkout@v3
-#    - uses: dtolnay/rust-toolchain@stable
-#      with:
-#        components: rustfmt
-#    - run: cargo fmt --all -- --check
+  rustfmt:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt
+    - run: cargo fmt -- --check
 
   msrv:
     name: Current MSRV is 1.60.0
