@@ -1,7 +1,8 @@
-use std::error::Error as StdError;
-use std::fmt;
-use std::str;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use core::error::Error as CoreError;
+use core::fmt;
+use core::str;
+use core::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(all(
     target_pointer_width = "32",
@@ -36,7 +37,7 @@ pub enum Error {
     InvalidFormat,
 }
 
-impl StdError for Error {}
+impl CoreError for Error {}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -27,3 +27,7 @@ harness = false
 [[bench]]
 name = "datetime_parse"
 harness = false
+
+[lints.clippy]
+std_instead_of_core = "warn"
+std_instead_of_alloc = "warn"

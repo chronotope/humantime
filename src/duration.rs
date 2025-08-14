@@ -1,7 +1,7 @@
-use std::error::Error as StdError;
-use std::fmt;
-use std::str::Chars;
-use std::time::Duration;
+use core::error::Error as CoreError;
+use core::fmt;
+use core::str::Chars;
+use core::time::Duration;
 
 /// Error parsing human-friendly duration
 #[derive(Debug, PartialEq, Clone)]
@@ -48,7 +48,7 @@ pub enum Error {
     Empty,
 }
 
-impl StdError for Error {}
+impl CoreError for Error {}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
