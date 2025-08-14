@@ -42,16 +42,15 @@ jobs:
     - uses: dtolnay/rust-toolchain@nightly
     - run: cargo test --all-features
 
-# TODO: clippy isn't happy
-#  clippy:
-#    name: Check that clippy is happy
-#    runs-on: ubuntu-latest
-#    steps:
-#    - uses: actions/checkout@v3
-#    - uses: dtolnay/rust-toolchain@nightly
-#      with:
-#        components: clippy
-#    - run: cargo clippy --all-features
+  clippy:
+    name: Check that clippy is happy
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy
+    - run: cargo clippy --all-features --all-targets
 
   rustfmt:
     name: Check formatting
