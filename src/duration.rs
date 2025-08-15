@@ -44,6 +44,14 @@ pub enum Error {
     /// data in subsecond units, then the maximum is about 3k years. When
     /// using seconds, or larger units, the limit is even larger.
     NumberOverflow,
+    /// The numeric value is too small
+    ///
+    /// Usually, this means that a decimal number was used with an unsupported unit,
+    /// or that the attempted precision is unsupported (too small decimals).
+    ///
+    /// For example, a duration of `0.5ns` is not supported, because durations below one
+    /// nanosecond cannot be represented.
+    NumberPrecisionLimit,
     /// The value was an empty string (or consists only whitespace)
     Empty,
 }
@@ -56,7 +64,7 @@ impl fmt::Display for Error {
             Error::InvalidCharacter(offset) => write!(f, "invalid character at {}", offset),
             Error::NumberExpected(offset) => write!(f, "expected number at {}", offset),
             Error::UnknownUnit { unit, value, .. } if unit.is_empty() => {
-                write!(f, "time unit needed, for example {0}sec or {0}ms", value,)
+                write!(f, "time unit needed, for example {0}sec or {0}ms", value)
             }
             Error::UnknownUnit { unit, .. } => {
                 write!(
@@ -68,6 +76,7 @@ impl fmt::Display for Error {
                 )
             }
             Error::NumberOverflow => write!(f, "number is too large"),
+            Error::NumberPrecisionLimit => write!(f, "number is too small or cannot be represented without a lack of precision (values below 1 nanosecond are not supported)"),
             Error::Empty => write!(f, "value was empty"),
         }
     }
@@ -80,6 +89,7 @@ pub struct FormattedDuration(Duration);
 trait OverflowOp: Sized {
     fn mul(self, other: Self) -> Result<Self, Error>;
     fn add(self, other: Self) -> Result<Self, Error>;
+    fn div(self, other: Self) -> Result<Self, Error>;
 }
 
 impl OverflowOp for u64 {
@@ -89,6 +99,18 @@ impl OverflowOp for u64 {
     fn add(self, other: Self) -> Result<Self, Error> {
         self.checked_add(other).ok_or(Error::NumberOverflow)
     }
+    fn div(self, other: Self) -> Result<Self, Error> {
+        match self % other {
+            0 => Ok(self / other),
+            _ => Err(Error::NumberPrecisionLimit),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Fraction {
+    numerator: u64,
+    denominator: u64,
 }
 
 struct Parser<'a> {
@@ -117,8 +139,28 @@ impl Parser<'_> {
         }
         Ok(None)
     }
-    fn parse_unit(&mut self, n: u64, start: usize, end: usize) -> Result<(), Error> {
-        let (mut sec, nsec) = match &self.src[start..end] {
+
+    fn add_current(&mut self, mut sec: u64, nsec: u64) -> Result<(), Error> {
+        let mut nsec = self.current.1.add(nsec)?;
+        if nsec > 1_000_000_000 {
+            sec = sec.add(nsec / 1_000_000_000)?;
+            nsec %= 1_000_000_000;
+        }
+        sec = self.current.0.add(sec)?;
+        self.current = (sec, nsec);
+        Ok(())
+    }
+
+    fn parse_unit(
+        &mut self,
+        n: u64,
+        frac: Option<Fraction>,
+        start: usize,
+        end: usize,
+    ) -> Result<(), Error> {
+        let unit = &self.src[start..end];
+        // add the integer part
+        let (sec, nsec) = match unit {
             "nanos" | "nsec" | "ns" => (0u64, n),
             "usec" | "us" | "µs" => (0u64, n.mul(1000)?),
             "millis" | "msec" | "ms" => (0u64, n.mul(1_000_000)?),
@@ -137,24 +179,93 @@ impl Parser<'_> {
                 return Err(Error::UnknownUnit {
                     start,
                     end,
-                    unit: self.src[start..end].to_string(),
+                    unit: unit.to_string(),
                     value: n,
                 });
             }
         };
-        let mut nsec = self.current.1.add(nsec)?;
-        if nsec > 1_000_000_000 {
-            sec = sec.add(nsec / 1_000_000_000)?;
-            nsec %= 1_000_000_000;
+        self.add_current(sec, nsec)?;
+
+        // add the fractional part
+        if let Some(Fraction {
+            numerator: n,
+            denominator: d,
+        }) = frac
+        {
+            let (sec, nsec) = match unit {
+                "nanos" | "nsec" | "ns" => return Err(Error::NumberPrecisionLimit),
+                "usec" | "us" | "µs" => (0, n.mul(1000)?.div(d)?),
+                "millis" | "msec" | "ms" => (0, n.mul(1_000_000)?.div(d)?),
+                "seconds" | "second" | "secs" | "sec" | "s" => (0, n.mul(1_000_000_000)?.div(d)?),
+                "minutes" | "minute" | "min" | "mins" | "m" => (0, n.mul(60_000_000_000)?.div(d)?),
+                "hours" | "hour" | "hr" | "hrs" | "h" => (n.mul(3600)?.div(d)?, 0),
+                "days" | "day" | "d" => (n.mul(86400)?.div(d)?, 0),
+                "weeks" | "week" | "wk" | "wks" | "w" => (n.mul(86400 * 7)?.div(d)?, 0),
+                "months" | "month" | "M" => (n.mul(2_630_016)?.div(d)?, 0), // 30.44d
+                "years" | "year" | "yr" | "yrs" | "y" => (n.mul(31_557_600)?.div(d)?, 0), // 365.25d
+                _ => {
+                    return Err(Error::UnknownUnit {
+                        start,
+                        end,
+                        unit: self.src[start..end].to_string(),
+                        value: n,
+                    });
+                }
+            };
+            self.add_current(sec, nsec)?;
         }
-        sec = self.current.0.add(sec)?;
-        self.current = (sec, nsec);
         Ok(())
     }
 
+    fn parse_fractional_part(&mut self, off: &mut usize) -> Result<Fraction, Error> {
+        let mut numerator = 0u64;
+        let mut denominator = 1u64;
+        let mut zeros = true;
+        while let Some(c) = self.iter.next() {
+            match c {
+                '0' => {
+                    denominator = denominator
+                        .checked_mul(10)
+                        .ok_or(Error::NumberPrecisionLimit)?;
+                    if !zeros {
+                        numerator = numerator.checked_mul(10).ok_or(Error::NumberOverflow)?;
+                    }
+                }
+                '1'..='9' => {
+                    zeros = false;
+                    denominator = denominator
+                        .checked_mul(10)
+                        .ok_or(Error::NumberPrecisionLimit)?;
+                    numerator = numerator
+                        .checked_mul(10)
+                        .and_then(|x| x.checked_add(c as u64 - '0' as u64))
+                        .ok_or(Error::NumberOverflow)?;
+                }
+                c if c.is_whitespace() => {}
+                'a'..='z' | 'A'..='Z' | 'µ' => {
+                    break;
+                }
+                _ => {
+                    return Err(Error::InvalidCharacter(*off));
+                }
+            };
+            // update the offset used by the parsing loop
+            *off = self.off();
+        }
+        if denominator == 1 {
+            // no digits were given after the separator, e.g. "1."
+            return Err(Error::InvalidCharacter(*off));
+        }
+        Ok(Fraction {
+            numerator,
+            denominator,
+        })
+    }
+
     fn parse(mut self) -> Result<Duration, Error> {
-        let mut n = self.parse_first_char()?.ok_or(Error::Empty)?;
+        let mut n = self.parse_first_char()?.ok_or(Error::Empty)?; // integer part
         'outer: loop {
+            let mut frac = None; // fractional part
             let mut off = self.off();
             while let Some(c) = self.iter.next() {
                 match c {
@@ -168,6 +279,11 @@ impl Parser<'_> {
                     'a'..='z' | 'A'..='Z' | 'µ' => {
                         break;
                     }
+                    '.' => {
+                        // decimal separator, the fractional part begins now
+                        frac = Some(self.parse_fractional_part(&mut off)?);
+                        break;
+                    }
                     _ => {
                         return Err(Error::InvalidCharacter(off));
                     }
@@ -179,7 +295,7 @@ impl Parser<'_> {
             while let Some(c) = self.iter.next() {
                 match c {
                     '0'..='9' => {
-                        self.parse_unit(n, start, off)?;
+                        self.parse_unit(n, frac, start, off)?;
                         n = c as u64 - '0' as u64;
                         continue 'outer;
                     }
@@ -191,7 +307,7 @@ impl Parser<'_> {
                 }
                 off = self.off();
             }
-            self.parse_unit(n, start, off)?;
+            self.parse_unit(n, frac, start, off)?;
             n = match self.parse_first_char()? {
                 Some(n) => n,
                 None => return Ok(Duration::new(self.current.0, self.current.1 as u32)),
@@ -224,6 +340,7 @@ impl Parser<'_> {
 ///
 /// assert_eq!(parse_duration("2h 37min"), Ok(Duration::new(9420, 0)));
 /// assert_eq!(parse_duration("32ms"), Ok(Duration::new(0, 32_000_000)));
+/// assert_eq!(parse_duration("4.2s"), Ok(Duration::new(4, 200_000_000)));
 /// ```
 pub fn parse_duration(s: &str) -> Result<Duration, Error> {
     if s == "0" {
@@ -397,6 +514,170 @@ mod test {
             Ok(Duration::new(10 * 31_557_600, 0))
         );
         assert_eq!(parse_duration("17y"), Ok(Duration::new(536_479_200, 0)));
+    }
+
+    #[test]
+    fn test_fractional_bad_input() {
+        assert!(matches!(
+            parse_duration("1.s"),
+            Err(Error::InvalidCharacter(_))
+        ));
+        assert!(matches!(
+            parse_duration("1..s"),
+            Err(Error::InvalidCharacter(_))
+        ));
+        assert!(matches!(
+            parse_duration(".1s"),
+            Err(Error::NumberExpected(_))
+        ));
+        assert!(matches!(parse_duration("."), Err(Error::NumberExpected(_))));
+        assert_eq!(
+            parse_duration("0.000123456789s"),
+            Err(Error::NumberPrecisionLimit)
+        );
+    }
+
+    #[test]
+    fn test_fractional_units() {
+        // nanos
+        for input in &["17.5nsec", "5.1nanos", "0.0005ns"] {
+            let bad_ns_frac = parse_duration(input);
+            assert!(
+                matches!(bad_ns_frac, Err(Error::NumberPrecisionLimit)),
+                "fractions of nanoseconds should fail, but got {bad_ns_frac:?}"
+            );
+        }
+
+        // micros
+        assert_eq!(parse_duration("3.1usec"), Ok(Duration::new(0, 3100)));
+        assert_eq!(parse_duration("3.1us"), Ok(Duration::new(0, 3100)));
+        assert_eq!(parse_duration("3.01us"), Ok(Duration::new(0, 3010)));
+        assert_eq!(parse_duration("3.001us"), Ok(Duration::new(0, 3001)));
+        for input in &["3.0001us", "0.0001us", "0.123456us"] {
+            let bad_ms_frac = parse_duration(input);
+            assert!(
+                matches!(bad_ms_frac, Err(Error::NumberPrecisionLimit)),
+                "too small fractions of microseconds should fail, but got {bad_ms_frac:?}"
+            );
+        }
+
+        // millis
+        assert_eq!(parse_duration("31.1msec"), Ok(Duration::new(0, 31_100_000)));
+        assert_eq!(
+            parse_duration("31.1millis"),
+            Ok(Duration::new(0, 31_100_000))
+        );
+        assert_eq!(parse_duration("31.1ms"), Ok(Duration::new(0, 31_100_000)));
+        assert_eq!(parse_duration("31.01ms"), Ok(Duration::new(0, 31_010_000)));
+        assert_eq!(parse_duration("31.001ms"), Ok(Duration::new(0, 31_001_000)));
+        assert_eq!(
+            parse_duration("31.0001ms"),
+            Ok(Duration::new(0, 31_000_100))
+        );
+        assert_eq!(
+            parse_duration("31.00001ms"),
+            Ok(Duration::new(0, 31_000_010))
+        );
+        assert_eq!(
+            parse_duration("31.000001ms"),
+            Ok(Duration::new(0, 31_000_001))
+        );
+        assert!(matches!(
+            parse_duration("31.0000001ms"),
+            Err(Error::NumberPrecisionLimit)
+        ));
+
+        // seconds
+        assert_eq!(parse_duration("300.0sec"), Ok(Duration::new(300, 0)));
+        assert_eq!(parse_duration("300.0secs"), Ok(Duration::new(300, 0)));
+        assert_eq!(parse_duration("300.0seconds"), Ok(Duration::new(300, 0)));
+        assert_eq!(parse_duration("300.0s"), Ok(Duration::new(300, 0)));
+        assert_eq!(parse_duration("0.0s"), Ok(Duration::new(0, 0)));
+        assert_eq!(parse_duration("0.2s"), Ok(Duration::new(0, 200_000_000)));
+        assert_eq!(parse_duration("1.2s"), Ok(Duration::new(1, 200_000_000)));
+        assert_eq!(parse_duration("1.02s"), Ok(Duration::new(1, 20_000_000)));
+        assert_eq!(parse_duration("1.002s"), Ok(Duration::new(1, 2_000_000)));
+        assert_eq!(parse_duration("1.0002s"), Ok(Duration::new(1, 200_000)));
+        assert_eq!(parse_duration("1.00002s"), Ok(Duration::new(1, 20_000)));
+        assert_eq!(parse_duration("1.000002s"), Ok(Duration::new(1, 2_000)));
+        assert_eq!(parse_duration("1.0000002s"), Ok(Duration::new(1, 200)));
+        assert_eq!(parse_duration("1.00000002s"), Ok(Duration::new(1, 20)));
+        assert_eq!(parse_duration("1.000000002s"), Ok(Duration::new(1, 2)));
+        assert_eq!(
+            parse_duration("1.123456789s"),
+            Ok(Duration::new(1, 123_456_789))
+        );
+        assert!(matches!(
+            parse_duration("1.0000000002s"),
+            Err(Error::NumberPrecisionLimit)
+        ));
+        assert!(matches!(
+            parse_duration("0.0000000002s"),
+            Err(Error::NumberPrecisionLimit)
+        ));
+
+        // minutes
+        assert_eq!(parse_duration("100.0m"), Ok(Duration::new(6000, 0)));
+        assert_eq!(parse_duration("12.1min"), Ok(Duration::new(726, 0)));
+        assert_eq!(parse_duration("12.1mins"), Ok(Duration::new(726, 0)));
+        assert_eq!(parse_duration("1.5minute"), Ok(Duration::new(90, 0)));
+        assert_eq!(parse_duration("1.5minutes"), Ok(Duration::new(90, 0)));
+
+        // hours
+        assert_eq!(parse_duration("2.0h"), Ok(Duration::new(7200, 0)));
+        assert_eq!(parse_duration("2.0hr"), Ok(Duration::new(7200, 0)));
+        assert_eq!(parse_duration("2.0hrs"), Ok(Duration::new(7200, 0)));
+        assert_eq!(parse_duration("2.0hours"), Ok(Duration::new(7200, 0)));
+        assert_eq!(parse_duration("2.5h"), Ok(Duration::new(9000, 0)));
+        assert_eq!(parse_duration("0.5h"), Ok(Duration::new(1800, 0)));
+
+        // days
+        assert_eq!(
+            parse_duration("1.5day"),
+            Ok(Duration::new(86400 + 86400 / 2, 0))
+        );
+        assert_eq!(
+            parse_duration("1.5days"),
+            Ok(Duration::new(86400 + 86400 / 2, 0))
+        );
+        assert_eq!(
+            parse_duration("1.5d"),
+            Ok(Duration::new(86400 + 86400 / 2, 0))
+        );
+        assert!(matches!(
+            parse_duration("0.00000005d"),
+            Err(Error::NumberPrecisionLimit)
+        ));
+    }
+
+    #[test]
+    fn test_fractional_combined() {
+        assert_eq!(parse_duration("7.120us 3ns"), Ok(Duration::new(0, 7123)));
+        assert_eq!(parse_duration("7.123us 4ns"), Ok(Duration::new(0, 7127)));
+        assert_eq!(
+            parse_duration("1.234s 789ns"),
+            Ok(Duration::new(1, 234_000_789))
+        );
+        assert_eq!(
+            parse_duration("1.234s 0.789us"),
+            Ok(Duration::new(1, 234_000_789))
+        );
+        assert_eq!(
+            parse_duration("1.234567s 0.789us"),
+            Ok(Duration::new(1, 234_567_789))
+        );
+        assert_eq!(
+            parse_duration("1.234s 1.345ms 1.678us 1ns"),
+            Ok(Duration::new(1, 235_346_679))
+        );
+        assert_eq!(
+            parse_duration("1.234s 0.345ms 0.678us 0ns"),
+            Ok(Duration::new(1, 234_345_678))
+        );
+        assert_eq!(
+            parse_duration("1.234s0.345ms0.678us0ns"),
+            Ok(Duration::new(1, 234_345_678))
+        );
     }
 
     #[test]
