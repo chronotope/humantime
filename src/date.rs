@@ -76,8 +76,9 @@ fn two_digits(b1: u8, b2: u8) -> Result<u64, Error> {
 
 /// Parse RFC3339 timestamp `2018-02-14T00:28:07Z`
 ///
-/// Supported feature: any precision of fractional
-/// digits `2018-02-14T00:28:07.133Z`.
+/// Supported features:
+/// - Any precision of fractional digits `2018-02-14T00:28:07.133Z`.
+/// - The UTC timezone can be indicated with `Z` or `+00:00`.
 ///
 /// Unsupported feature: localized timestamps. Only UTC is supported.
 pub fn parse_rfc3339(s: &str) -> Result<SystemTime, Error> {
@@ -85,7 +86,7 @@ pub fn parse_rfc3339(s: &str) -> Result<SystemTime, Error> {
         return Err(Error::InvalidFormat);
     }
     let b = s.as_bytes();
-    if b[10] != b'T' || b.last() != Some(&b'Z') {
+    if b[10] != b'T' || (b.last() != Some(&b'Z') && !s.ends_with("+00:00")) {
         return Err(Error::InvalidFormat);
     }
     parse_rfc3339_weak(s)
@@ -96,7 +97,7 @@ pub fn parse_rfc3339(s: &str) -> Result<SystemTime, Error> {
 /// Supported features:
 ///
 /// 1. Any precision of fractional digits `2018-02-14 00:28:07.133`.
-/// 2. Supports timestamp with or without either of `T` or `Z`
+/// 2. Supports timestamp with or without either of `T`, `Z` or `+00:00`.
 /// 3. Anything valid for [`parse_rfc3339`](parse_rfc3339) is valid for this function
 ///
 /// Unsupported feature: localized timestamps. Only UTC is supported, even if
@@ -171,14 +172,19 @@ pub fn parse_rfc3339_weak(s: &str) -> Result<SystemTime, Error> {
                 if idx == b.len() - 1 {
                     break;
                 }
-
+                return Err(Error::InvalidDigit);
+            } else if b[idx] == b'+' {
+                // start of "+00:00", which must be at the end
+                if idx == b.len() - 6 {
+                    break;
+                }
                 return Err(Error::InvalidDigit);
             }
 
             nanos += mult * (b[idx] as char).to_digit(10).ok_or(Error::InvalidDigit)?;
             mult /= 10;
         }
-    } else if b.len() != 19 && (b.len() > 20 || b[19] != b'Z') {
+    } else if b.len() != 19 && (b.len() > 25 || (b[19] != b'Z' && (&b[19..] != b"+00:00"))) {
         return Err(Error::InvalidFormat);
     }
 
@@ -678,5 +684,60 @@ mod test {
             UNIX_EPOCH + Duration::new(0, 0)
         );
         parse_rfc3339("1970-01-01 00:00:00Z").unwrap_err();
+    }
+
+    #[test]
+    fn parse_offset_00() {
+        assert_eq!(
+            parse_rfc3339("1970-01-01T00:00:00+00:00").unwrap(),
+            UNIX_EPOCH + Duration::new(0, 0)
+        );
+        assert_eq!(
+            parse_rfc3339("1970-01-01T00:00:01+00:00").unwrap(),
+            UNIX_EPOCH + Duration::new(1, 0)
+        );
+        assert_eq!(
+            parse_rfc3339("2018-02-13T23:08:32+00:00").unwrap(),
+            UNIX_EPOCH + Duration::new(1_518_563_312, 0)
+        );
+        assert_eq!(
+            parse_rfc3339("2012-01-01T00:00:00+00:00").unwrap(),
+            UNIX_EPOCH + Duration::new(1_325_376_000, 0)
+        );
+
+        // invalid
+        assert_eq!(
+            parse_rfc3339("2012-01-01T00:00:00 +00:00"),
+            Err(super::Error::InvalidFormat)
+        );
+        assert_eq!(
+            parse_rfc3339("2012-01-01T00:00:00+00"),
+            Err(super::Error::InvalidFormat)
+        );
+    }
+
+    #[test]
+    fn weak_parse_offset_00() {
+        assert_eq!(
+            parse_rfc3339_weak("1970-01-01 00:00:00+00:00").unwrap(),
+            UNIX_EPOCH + Duration::new(0, 0)
+        );
+        assert_eq!(
+            parse_rfc3339_weak("1970-01-01 00:00:00.000123+00:00").unwrap(),
+            UNIX_EPOCH + Duration::new(0, 123_000)
+        );
+        assert_eq!(
+            parse_rfc3339_weak("1970-01-01T00:00:00.000123+00:00").unwrap(),
+            UNIX_EPOCH + Duration::new(0, 123_000)
+        );
+
+        // invalid
+        parse_rfc3339("2012-01-01T+00:00:00").unwrap_err();
+        parse_rfc3339("1970-01-01 00:00:00.00+0123").unwrap_err();
+        parse_rfc3339("1970-01-01 00:00:00.0000123+00:00").unwrap_err();
+        parse_rfc3339("1970-01-01 00:00:00.0000123+00:00abcd").unwrap_err();
+        parse_rfc3339("1970-01-01 00:00:00.0000123+02:00").unwrap_err();
+        parse_rfc3339("1970-01-01 00:00:00.0000123+00").unwrap_err();
+        parse_rfc3339("1970-01-01 00:00:00.0000123+").unwrap_err();
     }
 }
