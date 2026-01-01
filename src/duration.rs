@@ -3,6 +3,16 @@ use std::fmt;
 use std::str::{Chars, FromStr};
 use std::time::Duration;
 
+#[cfg(not(feature = "leapless"))]
+const MONTH_SECONDS: u64 = 2_630_016; // 30.44d
+#[cfg(feature = "leapless")]
+const MONTH_SECONDS: u64 = 2_592_000; // 30d
+
+#[cfg(not(feature = "leapless"))]
+const YEAR_SECONDS: u64 = 31_557_600; // 365.25d
+#[cfg(feature = "leapless")]
+const YEAR_SECONDS: u64 = 31_536_000; // 365d
+
 /// Error parsing human-friendly duration
 #[derive(Debug, PartialEq, Clone)]
 pub enum Error {
@@ -261,8 +271,8 @@ impl Parser<'_> {
             Unit::Hour => (n.mul(3600)?, 0),
             Unit::Day => (n.mul(86400)?, 0),
             Unit::Week => (n.mul(86400 * 7)?, 0),
-            Unit::Month => (n.mul(2_630_016)?, 0), // 30.44d
-            Unit::Year => (n.mul(31_557_600)?, 0), // 365.25d
+            Unit::Month => (n.mul(MONTH_SECONDS)?, 0), // 30d
+            Unit::Year => (n.mul(YEAR_SECONDS)?, 0),   // 365d
         };
         add_current(sec, nsec, out)?;
 
@@ -281,8 +291,8 @@ impl Parser<'_> {
                 Unit::Hour => (n.mul(3600)?.div(d)?, 0),
                 Unit::Day => (n.mul(86400)?.div(d)?, 0),
                 Unit::Week => (n.mul(86400 * 7)?.div(d)?, 0),
-                Unit::Month => (n.mul(2_630_016)?.div(d)?, 0), // 30.44d
-                Unit::Year => (n.mul(31_557_600)?.div(d)?, 0), // 365.25d
+                Unit::Month => (n.mul(MONTH_SECONDS)?.div(d)?, 0), // 30d
+                Unit::Year => (n.mul(YEAR_SECONDS)?.div(d)?, 0),   // 365d
             };
             add_current(sec, nsec, out)?;
         }
@@ -348,8 +358,8 @@ impl FromStr for Unit {
 /// * `hours`, `hour`, `hr`, `hrs`, `h`
 /// * `days`, `day`, `d`
 /// * `weeks`, `week`, `wk`, `wks`, `w`
-/// * `months`, `month`, `M` -- defined as 30.44 days
-/// * `years`, `year`, `yr`, `yrs`, `y` -- defined as 365.25 days
+/// * `months`, `month`, `M` -- defined as 30.44 days, or 30 days with feature `leapless`
+/// * `years`, `year`, `yr`, `yrs`, `y` -- defined as 365.25 days, or 365 days with feature `leapless`
 ///
 /// # Examples
 ///
@@ -434,10 +444,10 @@ impl fmt::Display for FormattedDuration {
             return Ok(());
         }
 
-        let years = secs / 31_557_600; // 365.25d
-        let ydays = secs % 31_557_600;
-        let months = ydays / 2_630_016; // 30.44d
-        let mdays = ydays % 2_630_016;
+        let years = secs / YEAR_SECONDS;
+        let ydays = secs % YEAR_SECONDS;
+        let months = ydays / MONTH_SECONDS;
+        let mdays = ydays % MONTH_SECONDS;
         let days = mdays / 86400;
         let day_secs = mdays % 86400;
         let hours = day_secs / 3600;
@@ -472,7 +482,7 @@ mod test {
     use rand::Rng;
 
     use super::Error;
-    use super::{format_duration, parse_duration};
+    use super::{format_duration, parse_duration, MONTH_SECONDS, YEAR_SECONDS};
 
     #[test]
     #[allow(clippy::cognitive_complexity)]
@@ -512,26 +522,43 @@ mod test {
         );
         assert_eq!(parse_duration("100wk"), Ok(Duration::new(60_480_000, 0)));
         assert_eq!(parse_duration("52w"), Ok(Duration::new(31_449_600, 0)));
-        assert_eq!(parse_duration("1month"), Ok(Duration::new(2_630_016, 0)));
+
+        assert_eq!(
+            parse_duration("1month"),
+            Ok(Duration::new(MONTH_SECONDS, 0))
+        );
         assert_eq!(
             parse_duration("3months"),
-            Ok(Duration::new(3 * 2_630_016, 0))
+            Ok(Duration::new(3 * MONTH_SECONDS, 0))
         );
-        assert_eq!(parse_duration("12M"), Ok(Duration::new(31_560_192, 0)));
-        assert_eq!(parse_duration("1year"), Ok(Duration::new(31_557_600, 0)));
+        assert_eq!(parse_duration("1year"), Ok(Duration::new(YEAR_SECONDS, 0)));
         assert_eq!(
             parse_duration("7years"),
-            Ok(Duration::new(7 * 31_557_600, 0))
+            Ok(Duration::new(7 * YEAR_SECONDS, 0))
         );
         assert_eq!(
             parse_duration("15yrs"),
-            Ok(Duration::new(15 * 31_557_600, 0))
+            Ok(Duration::new(15 * YEAR_SECONDS, 0))
         );
         assert_eq!(
             parse_duration("10yr"),
-            Ok(Duration::new(10 * 31_557_600, 0))
+            Ok(Duration::new(10 * YEAR_SECONDS, 0))
         );
-        assert_eq!(parse_duration("17y"), Ok(Duration::new(536_479_200, 0)));
+        assert_eq!(
+            parse_duration("17y"),
+            Ok(Duration::new(17 * YEAR_SECONDS, 0))
+        );
+
+        #[cfg(not(feature = "leapless"))]
+        {
+            assert_eq!(parse_duration("12M"), Ok(Duration::new(YEAR_SECONDS, 0)));
+        }
+
+        #[cfg(feature = "leapless")]
+        {
+            assert_eq!(parse_duration("365days"), parse_duration("1year"));
+            assert_eq!(parse_duration("30days"), parse_duration("1month"));
+        }
     }
 
     #[test]
