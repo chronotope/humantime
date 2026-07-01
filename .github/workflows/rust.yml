@@ -17,7 +17,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --lib --no-default-features
       - run: cargo test --all-features
@@ -27,7 +27,7 @@ jobs:
   #    name: Build on no_std target (thumbv7em-none-eabi)
   #    runs-on: ubuntu-latest
   #    steps:
-  #      - uses: actions/checkout@v3
+  #      - uses: actions/checkout@v7
   #      - uses: dtolnay/rust-toolchain@master
   #        with:
   #          toolchain: stable
@@ -38,7 +38,7 @@ jobs:
     name: Test nightly compiler
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
       - run: cargo test --all-features
 
@@ -46,7 +46,7 @@ jobs:
     name: Check that clippy is happy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -56,7 +56,7 @@ jobs:
     name: Check formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -66,7 +66,7 @@ jobs:
     name: Current MSRV is 1.60.0
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       # First run `cargo +nightly -Z minimal-verisons check` in order to get a
       # Cargo.lock with the oldest possible deps
       # - uses: dtolnay/rust-toolchain@nightly
@@ -98,7 +98,7 @@ jobs:
 #    name: Check that benchmarks compile
 #    runs-on: ubuntu-latest
 #    steps:
-#    - uses: actions/checkout@v3
+#    - uses: actions/checkout@v7
 #    - uses: dtolnay/rust-toolchain@nightly
 #    - name: Build default (host native) bench
 #      run: cargo build --benches
