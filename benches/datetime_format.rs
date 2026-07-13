@@ -12,7 +12,7 @@ fn rfc3339_humantime_seconds(b: &mut Bencher) {
     let time = UNIX_EPOCH + Duration::new(1_483_228_799, 0);
     let mut buf = Vec::with_capacity(100);
     b.iter(|| {
-        buf.truncate(0);
+        buf.clear();
         write!(&mut buf, "{}", format_rfc3339(time)).unwrap()
     });
 }
@@ -46,7 +46,7 @@ fn rfc3339_chrono(b: &mut Bencher) {
     };
 
     b.iter(|| {
-        buf.truncate(0);
+        buf.clear();
         write!(
             &mut buf,
             "{}",
