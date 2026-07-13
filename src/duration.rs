@@ -293,7 +293,7 @@ impl Parser<'_> {
 
 fn add_current(mut sec: u64, nsec: u64, out: &mut Duration) -> Result<(), Error> {
     let mut nsec = (out.subsec_nanos() as u64).add(nsec)?;
-    if nsec > 1_000_000_000 {
+    if nsec >= 1_000_000_000 {
         sec = sec.add(nsec / 1_000_000_000)?;
         nsec %= 1_000_000_000;
     }
@@ -783,6 +783,14 @@ mod test {
         );
         assert_eq!(
             parse_duration("10000000000000y"),
+            Err(Error::NumberOverflow)
+        );
+        assert_eq!(
+            parse_duration(&format!("{}s1000ms", u64::MAX)),
+            Err(Error::NumberOverflow)
+        );
+        assert_eq!(
+            parse_duration(&format!("{}s 999999999ns 1ns", u64::MAX)),
             Err(Error::NumberOverflow)
         );
     }
