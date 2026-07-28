@@ -128,9 +128,16 @@ pub fn parse_rfc3339_weak(s: &str) -> Result<SystemTime, Error> {
     if year < 1970 || hour > 23 || minute > 59 || second > 60 {
         return Err(Error::OutOfRange);
     }
-    // TODO(tailhook) should we check that leaps second is only on midnight ?
     if second == 60 {
-        second = 59;
+        // Per RFC 3339 `:60` is only valid as a leap second at `23:59:60`.
+        // `SystemTime` cannot represent a leap second, so fold it onto `:59`
+        // there (preserving the long-standing leap-second behaviour) and reject
+        // `:60` elsewhere instead of silently mapping it to a different instant.
+        if hour == 23 && minute == 59 {
+            second = 59;
+        } else {
+            return Err(Error::OutOfRange);
+        }
     }
 
     let leap = is_leap_year(year);
@@ -167,6 +174,7 @@ pub fn parse_rfc3339_weak(s: &str) -> Result<SystemTime, Error> {
     let mut nanos = 0;
     let mut mult = 100_000_000;
     if b.get(19) == Some(&b'.') {
+        let mut digits = 0;
         for idx in 20..b.len() {
             if b[idx] == b'Z' {
                 if idx == b.len() - 1 {
@@ -174,15 +182,21 @@ pub fn parse_rfc3339_weak(s: &str) -> Result<SystemTime, Error> {
                 }
                 return Err(Error::InvalidDigit);
             } else if b[idx] == b'+' {
-                // start of "+00:00", which must be at the end
-                if idx == b.len() - 6 {
+                // start of "+00:00", the only supported (UTC) offset, which
+                // must be exactly the last six bytes
+                if &b[idx..] == b"+00:00" {
                     break;
                 }
-                return Err(Error::InvalidDigit);
+                return Err(Error::InvalidFormat);
             }
 
             nanos += mult * (b[idx] as char).to_digit(10).ok_or(Error::InvalidDigit)?;
             mult /= 10;
+            digits += 1;
+        }
+        // `time-secfrac = "." 1*DIGIT`: the dot requires at least one digit
+        if digits == 0 {
+            return Err(Error::InvalidFormat);
         }
     } else if b.len() != 19 && (b.len() > 25 || (b[19] != b'Z' && (&b[19..] != b"+00:00"))) {
         return Err(Error::InvalidFormat);
@@ -739,5 +753,75 @@ mod test {
         parse_rfc3339("1970-01-01 00:00:00.0000123+02:00").unwrap_err();
         parse_rfc3339("1970-01-01 00:00:00.0000123+00").unwrap_err();
         parse_rfc3339("1970-01-01 00:00:00.0000123+").unwrap_err();
+    }
+
+    // A `.` with no fractional digits (RFC 3339 `time-secfrac = "." 1*DIGIT`).
+    #[test]
+    fn empty_fractional_part_rejected() {
+        for s in [
+            "2018-02-14T00:28:07.Z",
+            "2018-02-14T00:28:07.+00:00",
+            "1970-01-01T00:00:00.Z",
+        ] {
+            assert_eq!(parse_rfc3339(s), Err(super::Error::InvalidFormat), "{s}");
+        }
+        // weak: a trailing `.` with nothing after it is also invalid
+        for s in ["1970-01-01 00:00:00.", "1970-01-01 00:00:00.+00:00"] {
+            assert_eq!(
+                parse_rfc3339_weak(s),
+                Err(super::Error::InvalidFormat),
+                "{s}"
+            );
+        }
+        // still accept a genuine fraction of any length
+        for s in [
+            "2018-02-14T00:28:07.1Z",
+            "2018-02-14T00:28:07.000Z",
+            "2018-02-14T00:28:07.123456789Z",
+            "2018-02-14T00:28:07.5+00:00",
+        ] {
+            assert!(parse_rfc3339(s).is_ok(), "{s}");
+        }
+    }
+
+    // B `:60` only folds onto `:59` at `23:59:60`; elsewhere it is rejected
+    // rather than silently mapped to a different instant.
+    #[test]
+    fn leap_second_only_at_boundary() {
+        // boundary: preserved leap-second behaviour (folds onto :59)
+        assert_eq!(
+            parse_rfc3339("2016-12-31T23:59:60Z").unwrap(),
+            parse_rfc3339("2016-12-31T23:59:59Z").unwrap()
+        );
+        // off-boundary `:60` no longer collapses onto `:59`
+        for s in [
+            "2018-06-15T12:30:60Z",
+            "1970-01-01T00:00:60Z",
+            "2018-06-15T23:30:60Z", // right hour, wrong minute
+            "2018-06-15T12:59:60Z", // right minute, wrong hour
+        ] {
+            assert_eq!(parse_rfc3339(s), Err(super::Error::OutOfRange), "{s}");
+        }
+        // ordinary seconds are unaffected
+        assert!(parse_rfc3339("2018-06-15T12:30:59Z").is_ok());
+    }
+
+    // C the fractional-seconds path must validate the offset like the
+    // non-fractional path does; only `Z` / `+00:00` are UTC (issue #67).
+    #[test]
+    fn fractional_offset_must_be_utc() {
+        for s in [
+            "2018-02-14T00:28:07.1+01:00",
+            "2018-02-14T00:28:07.1+99:99",
+            "2018-02-14T00:28:07.1+ab:cd",
+            "1970-01-01 00:00:00.0000123+02:00",
+        ] {
+            assert!(parse_rfc3339_weak(s).is_err(), "{s}");
+        }
+        // the fractional path still accepts the two UTC spellings
+        assert_eq!(
+            parse_rfc3339_weak("2018-02-14T00:28:07.1+00:00").unwrap(),
+            parse_rfc3339_weak("2018-02-14T00:28:07.1Z").unwrap()
+        );
     }
 }
