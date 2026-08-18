@@ -121,19 +121,32 @@ impl Parser<'_> {
         'outer: loop {
             let mut frac = None; // fractional part
             let mut off = self.off();
+            // Once whitespace has terminated the current numeric literal, a
+            // following digit or decimal point means whitespace was embedded
+            // inside the number (e.g. "1 2h"), which silently corrupts the
+            // value and must be rejected.
+            let mut saw_whitespace = false;
             while let Some(c) = self.iter.next() {
                 match c {
                     '0'..='9' => {
+                        if saw_whitespace {
+                            return Err(Error::InvalidCharacter(off));
+                        }
                         n = n
                             .checked_mul(10)
                             .and_then(|x| x.checked_add(c as u64 - '0' as u64))
                             .ok_or(Error::NumberOverflow)?;
                     }
-                    c if c.is_whitespace() => {}
+                    c if c.is_whitespace() => {
+                        saw_whitespace = true;
+                    }
                     'a'..='z' | 'A'..='Z' | 'µ' => {
                         break;
                     }
                     '.' => {
+                        if saw_whitespace {
+                            return Err(Error::InvalidCharacter(off));
+                        }
                         // decimal separator, the fractional part begins now
                         frac = Some(self.parse_fractional_part(&mut off)?);
                         break;
@@ -190,15 +203,25 @@ impl Parser<'_> {
         let mut numerator = 0u64;
         let mut denominator = 1u64;
         let mut zeros = true;
+        // As in the integer loop, whitespace embedded inside the fractional
+        // literal (e.g. "1. 5s") would otherwise be silently ignored and
+        // corrupt the value, so reject a digit that follows whitespace.
+        let mut saw_whitespace = false;
         while let Some(c) = self.iter.next() {
             match c {
                 '0' => {
+                    if saw_whitespace {
+                        return Err(Error::InvalidCharacter(*off));
+                    }
                     denominator = denominator.checked_mul(10).ok_or(Error::NumberOverflow)?;
                     if !zeros {
                         numerator = numerator.checked_mul(10).ok_or(Error::NumberOverflow)?;
                     }
                 }
                 '1'..='9' => {
+                    if saw_whitespace {
+                        return Err(Error::InvalidCharacter(*off));
+                    }
                     zeros = false;
                     denominator = denominator.checked_mul(10).ok_or(Error::NumberOverflow)?;
                     numerator = numerator
@@ -206,7 +229,9 @@ impl Parser<'_> {
                         .and_then(|x| x.checked_add(c as u64 - '0' as u64))
                         .ok_or(Error::NumberOverflow)?;
                 }
-                c if c.is_whitespace() => {}
+                c if c.is_whitespace() => {
+                    saw_whitespace = true;
+                }
                 'a'..='z' | 'A'..='Z' | 'µ' => {
                     break;
                 }
@@ -553,6 +578,30 @@ mod test {
             parse_duration("0.000123456789s"),
             Err(Error::NumberOverflow)
         );
+    }
+
+    #[test]
+    fn whitespace_inside_number_is_rejected() {
+        // Whitespace embedded inside a numeric literal used to be silently
+        // ignored, so digits resumed after the space and the value was
+        // reinterpreted (e.g. "1 2h" parsed as 12h). Reject it instead.
+        assert!(
+            parse_duration("1 2h").is_err(),
+            "\"1 2h\" must not parse (would silently become 12h)"
+        );
+        assert!(
+            parse_duration("1 2 3s").is_err(),
+            "\"1 2 3s\" must not parse (would silently become 123s)"
+        );
+        assert!(
+            parse_duration("1. 5s").is_err(),
+            "\"1. 5s\" must not parse (would silently become 1.5s)"
+        );
+
+        // Whitespace at value/unit and component boundaries stays valid.
+        assert_eq!(parse_duration("1.5 s"), Ok(Duration::new(1, 500_000_000)));
+        assert!(parse_duration("20 min 17 nsec").is_ok());
+        assert!(parse_duration("2h 37min").is_ok());
     }
 
     #[test]
