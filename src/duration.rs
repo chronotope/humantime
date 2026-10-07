@@ -1,6 +1,8 @@
+#![warn(missing_docs)]
 use std::error::Error as StdError;
 use std::fmt;
-use std::str::{Chars, FromStr};
+use std::marker::PhantomData;
+use std::str::Chars;
 use std::time::Duration;
 
 /// Error parsing human-friendly duration
@@ -80,7 +82,10 @@ impl fmt::Display for Error {
 
 /// A wrapper type that allows you to Display a Duration
 #[derive(Debug, Clone)]
-pub struct FormattedDuration(Duration);
+pub struct FormattedDuration<T: LanguageFormatter = English> {
+    duration: Duration,
+    _lang: PhantomData<T>,
+}
 
 trait OverflowOp: Sized {
     fn mul(self, other: Self) -> Result<Self, Error>;
@@ -109,12 +114,13 @@ struct Fraction {
     denominator: u64,
 }
 
-struct Parser<'a> {
+struct Parser<'a, T: LanguageFormatter> {
     iter: Chars<'a>,
     src: &'a str,
+    _lang: PhantomData<T>,
 }
 
-impl Parser<'_> {
+impl<T: LanguageFormatter> Parser<'_, T> {
     fn parse(mut self) -> Result<Duration, Error> {
         let mut n = self.parse_first_char()?.ok_or(Error::Empty)?; // integer part
         let mut out = Duration::ZERO;
@@ -130,10 +136,10 @@ impl Parser<'_> {
                             .ok_or(Error::NumberOverflow)?;
                     }
                     c if c.is_whitespace() => {}
-                    'a'..='z' | 'A'..='Z' | 'µ' => {
+                    c if T::is_unit_char(c) => {
                         break;
                     }
-                    '.' => {
+                    c if c == T::fract_separator() => {
                         // decimal separator, the fractional part begins now
                         frac = Some(self.parse_fractional_part(&mut off)?);
                         break;
@@ -154,7 +160,7 @@ impl Parser<'_> {
                         continue 'outer;
                     }
                     c if c.is_whitespace() => break,
-                    'a'..='z' | 'A'..='Z' | 'µ' => {}
+                    c if T::is_unit_char(c) => {}
                     _ => {
                         return Err(Error::InvalidCharacter(off));
                     }
@@ -207,7 +213,7 @@ impl Parser<'_> {
                         .ok_or(Error::NumberOverflow)?;
                 }
                 c if c.is_whitespace() => {}
-                'a'..='z' | 'A'..='Z' | 'µ' => {
+                c if T::is_unit_char(c) => {
                     break;
                 }
                 _ => {
@@ -239,17 +245,12 @@ impl Parser<'_> {
         end: usize,
         out: &mut Duration,
     ) -> Result<(), Error> {
-        let unit = match Unit::from_str(&self.src[start..end]) {
-            Ok(u) => u,
-            Err(()) => {
-                return Err(Error::UnknownUnit {
-                    start,
-                    end,
-                    unit: self.src[start..end].to_owned(),
-                    value: n,
-                });
-            }
-        };
+        let unit = T::from_str(&self.src[start..end]).ok_or_else(|| Error::UnknownUnit {
+            start,
+            end,
+            unit: self.src[start..end].to_owned(),
+            value: n,
+        })?;
 
         // add the integer part
         let (sec, nsec) = match unit {
@@ -302,35 +303,144 @@ fn add_current(mut sec: u64, nsec: u64, out: &mut Duration) -> Result<(), Error>
     Ok(())
 }
 
-enum Unit {
+/// Time unit of a single span in a duration string
+///
+/// Returned by [`LanguageFormatter::from_str`] to map a language
+/// specific unit like `sec` or `Sekunden` to its length.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unit {
+    /// 1 ns
     Nanosecond,
+    /// 1 µs = 1 000 ns
     Microsecond,
+    /// 1 ms = 1 000 µs
     Millisecond,
+    /// 1 s
     Second,
+    /// 60 s
     Minute,
+    /// 60 min
     Hour,
+    /// 24 h
     Day,
+    /// 7 days
     Week,
+    /// 30.44 days
     Month,
+    /// 365.25 days
     Year,
 }
 
-impl FromStr for Unit {
-    type Err = ();
+/// Language specific rules for parsing durations
+///
+/// Implement this trait to support time units of another language,
+/// then parse with `parse_duration_with::<YourFormatter>`.
+///
+/// # Examples
+///
+/// ```
+/// # #[cfg(feature = "lang")] {
+/// use humantime::{LanguageFormatter, Unit};
+///
+/// struct Short;
+///
+/// impl LanguageFormatter for Short {
+///     fn from_str(s: &str) -> Option<Unit> {
+///         match s {
+///             "s" => Some(Unit::Second),
+///             "m" => Some(Unit::Minute),
+///             "h" => Some(Unit::Hour),
+///             // further implementations
+///             _ => None,
+///         }
+///     }
+///
+///     fn to_str(u: Unit, value: u64) -> &'static str {
+///         let plural = value > 1;
+///        // let dual = value == 2; //here you can add dual if needed
+///         match u {
+///             Unit::Week if plural => "W's",
+///             Unit::Week => "W",
+///             Unit::Month if plural => "M's",
+///             Unit::Month => "M",
+///             // further implementations
+///             _ => "unit",
+///       }
+///     }
+/// }
+/// # }
+/// ```
+pub trait LanguageFormatter {
+    /// Converts a time unit string into a [`Unit`]
+    ///
+    /// Return `None` for unknown units, which results in
+    /// [`Error::UnknownUnit`]. Which characters can appear in a unit
+    /// is decided by [`is_unit_char`](Self::is_unit_char).
+    fn from_str(s: &str) -> Option<Unit>;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    /// Converts a time unit type to a string.
+    ///
+    /// Respects the quantity of the value.
+    /// For example it will return "weeks" instead of "week" if the `value` >= 2.
+    /// It does not return the `value` only the unit string.
+    fn to_str(u: Unit, value: u64) -> &'static str;
+
+    /// Characters allowed in a unit, defaults to ASCII letters and `µ`
+    fn is_unit_char(c: char) -> bool {
+        c.is_ascii_alphabetic() || c == 'µ'
+    }
+
+    /// Separator between the integer and fractional part of a number
+    ///
+    /// Defaults to `.`, e.g. `4.2s`. Override it for languages that use
+    /// a different decimal separator, e.g. `,` for German.
+    fn fract_separator() -> char {
+        '.'
+    }
+}
+
+/// English [`LanguageFormatter`] for `parse_duration_with`
+#[derive(Debug, Clone, Copy)]
+pub struct English;
+
+impl LanguageFormatter for English {
+    fn from_str(s: &str) -> Option<Unit> {
         match s {
-            "nanos" | "nsec" | "ns" => Ok(Self::Nanosecond),
-            "usec" | "us" | "µs" => Ok(Self::Microsecond),
-            "millis" | "msec" | "ms" => Ok(Self::Millisecond),
-            "seconds" | "second" | "secs" | "sec" | "s" => Ok(Self::Second),
-            "minutes" | "minute" | "min" | "mins" | "m" => Ok(Self::Minute),
-            "hours" | "hour" | "hr" | "hrs" | "h" => Ok(Self::Hour),
-            "days" | "day" | "d" => Ok(Self::Day),
-            "weeks" | "week" | "wk" | "wks" | "w" => Ok(Self::Week),
-            "months" | "month" | "M" => Ok(Self::Month),
-            "years" | "year" | "yr" | "yrs" | "y" => Ok(Self::Year),
-            _ => Err(()),
+            "nanos" | "nsec" | "ns" => Some(Unit::Nanosecond),
+            "usec" | "us" | "µs" => Some(Unit::Microsecond),
+            "millis" | "msec" | "ms" => Some(Unit::Millisecond),
+            "seconds" | "second" | "secs" | "sec" | "s" => Some(Unit::Second),
+            "minutes" | "minute" | "min" | "mins" | "m" => Some(Unit::Minute),
+            "hours" | "hour" | "hr" | "hrs" | "h" => Some(Unit::Hour),
+            "days" | "day" | "d" => Some(Unit::Day),
+            "weeks" | "week" | "wk" | "wks" | "w" => Some(Unit::Week),
+            "months" | "month" | "M" => Some(Unit::Month),
+            "years" | "year" | "yr" | "yrs" | "y" => Some(Unit::Year),
+            _ => None,
+        }
+    }
+
+    fn to_str(u: Unit, value: u64) -> &'static str {
+        let plural = value > 1;
+        match u {
+            Unit::Nanosecond => "ns",
+            #[cfg(feature = "mu")]
+            Unit::Microsecond => "µs",
+            #[cfg(not(feature = "mu"))]
+            Unit::Microsecond => "us",
+            Unit::Millisecond => "ms",
+            Unit::Second => "s",
+            Unit::Minute => "m",
+            Unit::Hour => "h",
+            Unit::Day if plural => "days",
+            Unit::Day => "day",
+            Unit::Week if plural => "weeks",
+            Unit::Week => "week",
+            Unit::Month if plural => "months",
+            Unit::Month => "month",
+            Unit::Year if plural => "years",
+            Unit::Year => "year",
         }
     }
 }
@@ -362,12 +472,48 @@ impl FromStr for Unit {
 /// assert_eq!(parse_duration("4.2s"), Ok(Duration::new(4, 200_000_000)));
 /// ```
 pub fn parse_duration(s: &str) -> Result<Duration, Error> {
+    parse_duration_with::<English>(s)
+}
+
+/// Parse duration object `1hour 12min 5s` like ['parse_duration'] but with
+/// a given language.
+///
+/// The duration object is a concatenation of time spans. Where each time
+/// span is an integer number and a suffix. Supported suffixes are depending
+/// on the ['LanguageFormatter'] implementation. Here a example of the English supported suffixes:
+///
+/// * `nsec`, `ns` -- nanoseconds
+/// * `usec`, `us`, `µs` -- microseconds
+/// * `msec`, `ms` -- milliseconds
+/// * `seconds`, `second`, `sec`, `s`
+/// * `minutes`, `minute`, `min`, `m`
+/// * `hours`, `hour`, `hr`, `hrs`, `h`
+/// * `days`, `day`, `d`
+/// * `weeks`, `week`, `wk`, `wks`, `w`
+/// * `months`, `month`, `M` -- defined as 30.44 days
+/// * `years`, `year`, `yr`, `yrs`, `y` -- defined as 365.25 days
+///
+/// # Examples
+///
+/// ```
+/// # #[cfg(feature = "lang")] {
+/// use std::time::Duration;
+/// use humantime::{parse_duration_with, English};
+///
+/// assert_eq!(parse_duration_with::<English>("2h 37min"), Ok(Duration::new(9420, 0)));
+/// assert_eq!(parse_duration_with::<English>("32ms"), Ok(Duration::new(0, 32_000_000)));
+/// assert_eq!(parse_duration_with::<English>("4.2s"), Ok(Duration::new(4, 200_000_000)));
+/// # }
+/// ```
+#[cfg_attr(not(feature = "lang"), allow(unreachable_pub))]
+pub fn parse_duration_with<T: LanguageFormatter>(s: &str) -> Result<Duration, Error> {
     if s == "0" {
         return Ok(Duration::ZERO);
     }
-    Parser {
+    Parser::<T> {
         iter: s.chars(),
         src: s,
+        _lang: PhantomData,
     }
     .parse()
 }
@@ -390,47 +536,63 @@ pub fn parse_duration(s: &str) -> Result<Duration, Error> {
 /// assert_eq!(format_duration(val2).to_string(), "32ms");
 /// ```
 pub fn format_duration(val: Duration) -> FormattedDuration {
-    FormattedDuration(val)
+    format_duration_with::<English>(val)
 }
 
-fn item_plural(f: &mut fmt::Formatter, started: &mut bool, name: &str, value: u64) -> fmt::Result {
+/// Formats duration into a human-readable string in the given language
+///
+/// See also [`format_duration`]
+/// # Examples
+///
+/// ```
+/// # #[cfg(feature = "lang")] {
+/// use std::time::Duration;
+/// use humantime::{format_duration_with, English};
+///
+/// let val1 = Duration::new(9420, 0);
+/// assert_eq!(format_duration_with::<English>(val1).to_string(), "2h 37m");
+/// let val2 = Duration::new(0, 32_000_000);
+/// assert_eq!(format_duration_with::<English>(val2).to_string(), "32ms");
+/// # }
+/// ```
+#[cfg_attr(not(feature = "lang"), allow(unreachable_pub))]
+pub fn format_duration_with<T: LanguageFormatter>(duration: Duration) -> FormattedDuration<T> {
+    FormattedDuration {
+        duration,
+        _lang: PhantomData,
+    }
+}
+
+fn item<T: LanguageFormatter>(
+    f: &mut fmt::Formatter,
+    started: &mut bool,
+    unit: Unit,
+    value: u64,
+) -> fmt::Result {
     if value > 0 {
         if *started {
             f.write_str(" ")?;
         }
-        write!(f, "{}{}", value, name)?;
-        if value > 1 {
-            f.write_str("s")?;
-        }
-        *started = true;
-    }
-    Ok(())
-}
-fn item(f: &mut fmt::Formatter, started: &mut bool, name: &str, value: u32) -> fmt::Result {
-    if value > 0 {
-        if *started {
-            f.write_str(" ")?;
-        }
-        write!(f, "{}{}", value, name)?;
+        write!(f, "{}{}", value, T::to_str(unit, value))?;
         *started = true;
     }
     Ok(())
 }
 
-impl FormattedDuration {
+impl<T: LanguageFormatter> FormattedDuration<T> {
     /// Returns a reference to the [`Duration`][] that is being formatted.
     pub fn get_ref(&self) -> &Duration {
-        &self.0
+        &self.duration
     }
 }
 
-impl fmt::Display for FormattedDuration {
+impl<T: LanguageFormatter> fmt::Display for FormattedDuration<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let secs = self.0.as_secs();
-        let nanos = self.0.subsec_nanos();
+        let secs = self.duration.as_secs();
+        let nanos = self.duration.subsec_nanos();
 
         if secs == 0 && nanos == 0 {
-            f.write_str("0s")?;
+            write!(f, "0{}", T::to_str(Unit::Second, 0))?;
             return Ok(());
         }
 
@@ -449,18 +611,15 @@ impl fmt::Display for FormattedDuration {
         let nanosec = nanos % 1000;
 
         let started = &mut false;
-        item_plural(f, started, "year", years)?;
-        item_plural(f, started, "month", months)?;
-        item_plural(f, started, "day", days)?;
-        item(f, started, "h", hours as u32)?;
-        item(f, started, "m", minutes as u32)?;
-        item(f, started, "s", seconds as u32)?;
-        item(f, started, "ms", millis)?;
-        #[cfg(feature = "mu")]
-        item(f, started, "µs", micros)?;
-        #[cfg(not(feature = "mu"))]
-        item(f, started, "us", micros)?;
-        item(f, started, "ns", nanosec)?;
+        item::<T>(f, started, Unit::Year, years)?;
+        item::<T>(f, started, Unit::Month, months)?;
+        item::<T>(f, started, Unit::Day, days)?;
+        item::<T>(f, started, Unit::Hour, hours)?;
+        item::<T>(f, started, Unit::Minute, minutes)?;
+        item::<T>(f, started, Unit::Second, seconds)?;
+        item::<T>(f, started, Unit::Millisecond, millis as u64)?;
+        item::<T>(f, started, Unit::Microsecond, micros as u64)?;
+        item::<T>(f, started, Unit::Nanosecond, nanosec as u64)?;
         Ok(())
     }
 }

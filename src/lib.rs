@@ -31,3 +31,8 @@ pub use self::date::{parse_rfc3339, parse_rfc3339_weak, Error as TimestampError}
 pub use self::duration::{format_duration, FormattedDuration};
 pub use self::duration::{parse_duration, Error as DurationError};
 pub use self::wrapper::{Duration, Timestamp};
+
+#[cfg(feature = "lang")]
+pub use self::duration::{
+    format_duration_with, parse_duration_with, English, LanguageFormatter, Unit,
+};
