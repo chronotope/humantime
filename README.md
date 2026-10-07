@@ -1,6 +1,14 @@
 Human Time
 ==========
 
+> [!NOTE]
+> humantime is no longer actively developed and new features will not be
+> accepted. For new projects, use [jiff](https://github.com/BurntSushi/jiff) instead.
+> Its [friendly duration format](https://docs.rs/jiff/latest/jiff/fmt/friendly/index.html)
+> covers humantime's use cases, including serde support.
+>
+> See [this issue](https://github.com/chronotope/chrono/issues/1768) for the background.
+
 **Status: stable**
 
 [Documentation](https://docs.rs/humantime) |
@@ -18,7 +26,6 @@ Features:
 Timestamp parsing/formatting is super-fast because format is basically
 fixed.
 
-Here are some micro-benchmarks:
 
 ```
 test result: ok. 0 passed; 0 failed; 26 ignored; 0 measured; 0 filtered out
