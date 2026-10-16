@@ -121,15 +121,19 @@ impl Parser<'_> {
         'outer: loop {
             let mut frac = None; // fractional part
             let mut off = self.off();
+            let mut number_ended = false;
             while let Some(c) = self.iter.next() {
                 match c {
+                    '0'..='9' | '.' if number_ended => {
+                        return Err(Error::InvalidCharacter(off));
+                    }
                     '0'..='9' => {
                         n = n
                             .checked_mul(10)
                             .and_then(|x| x.checked_add(c as u64 - '0' as u64))
                             .ok_or(Error::NumberOverflow)?;
                     }
-                    c if c.is_whitespace() => {}
+                    c if c.is_whitespace() => number_ended = true,
                     'a'..='z' | 'A'..='Z' | 'µ' => {
                         break;
                     }
@@ -190,8 +194,12 @@ impl Parser<'_> {
         let mut numerator = 0u64;
         let mut denominator = 1u64;
         let mut zeros = true;
+        let mut number_ended = false;
         while let Some(c) = self.iter.next() {
             match c {
+                '0'..='9' if number_ended => {
+                    return Err(Error::InvalidCharacter(*off));
+                }
                 '0' => {
                     denominator = denominator.checked_mul(10).ok_or(Error::NumberOverflow)?;
                     if !zeros {
@@ -206,7 +214,7 @@ impl Parser<'_> {
                         .and_then(|x| x.checked_add(c as u64 - '0' as u64))
                         .ok_or(Error::NumberOverflow)?;
                 }
-                c if c.is_whitespace() => {}
+                c if c.is_whitespace() => number_ended = true,
                 'a'..='z' | 'A'..='Z' | 'µ' => {
                     break;
                 }
@@ -338,7 +346,8 @@ impl FromStr for Unit {
 /// Parse duration object `1hour 12min 5s`
 ///
 /// The duration object is a concatenation of time spans. Where each time
-/// span is an integer number and a suffix. Supported suffixes:
+/// span is a number and a suffix. Whitespace is allowed between the number
+/// and its suffix and between spans, but not within a number. Supported suffixes:
 ///
 /// * `nsec`, `ns` -- nanoseconds
 /// * `usec`, `us`, `µs` -- microseconds
@@ -532,6 +541,57 @@ mod test {
             Ok(Duration::new(10 * 31_557_600, 0))
         );
         assert_eq!(parse_duration("17y"), Ok(Duration::new(536_479_200, 0)));
+    }
+
+    #[test]
+    fn reject_whitespace_inside_integer() {
+        for (input, offset) in [
+            ("1 2h", 2),
+            ("1 2 3s", 2),
+            ("1\t2s", 2),
+            ("1\n2s", 2),
+            ("1\u{2003}2s", 4),
+            ("1 .5s", 2),
+            ("2h 1 2min", 5),
+        ] {
+            assert_eq!(
+                parse_duration(input),
+                Err(Error::InvalidCharacter(offset)),
+                "{input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn reject_whitespace_inside_fraction() {
+        for (input, offset) in [
+            ("1. 5s", 3),
+            ("1.5 0s", 4),
+            ("1.\t5s", 3),
+            ("1.5\n0s", 4),
+            ("1.\u{2003}5s", 5),
+            ("2h 1. 5min", 6),
+        ] {
+            assert_eq!(
+                parse_duration(input),
+                Err(Error::InvalidCharacter(offset)),
+                "{input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn allow_whitespace_around_duration_components() {
+        for (input, expected) in [
+            ("  12h  ", Duration::from_secs(12 * 3600)),
+            ("20 min 17 nsec", Duration::new(1200, 17)),
+            ("1.5 s", Duration::new(1, 500_000_000)),
+            ("1\t\n s", Duration::from_secs(1)),
+            ("1.5\u{2003}s", Duration::new(1, 500_000_000)),
+            ("1.5 s 2 min", Duration::new(121, 500_000_000)),
+        ] {
+            assert_eq!(parse_duration(input), Ok(expected), "{input:?}");
+        }
     }
 
     #[test]
